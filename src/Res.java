@@ -10,8 +10,11 @@ public class Res {
 	static char[] bases = {'A','T','G','C'};
 	static Hashtable<Character, Integer> basesMap;
 	
-	public static void PutBasesVal(){
+	private static void PutBasesVal(){
 		basesMap = new Hashtable<Character, Integer>();
 		for(int i = 0; i< bases.length; i++) basesMap.put(bases[i], i);
+	}
+	public static void Init(){
+		PutBasesVal();
 	}
 }

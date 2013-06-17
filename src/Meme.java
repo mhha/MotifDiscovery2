@@ -2,73 +2,100 @@ import java.util.Random;
 
 public class Meme {
 	
-	//static Integer MAX_LENGTH_OF_SEQ ;
 	static Integer NUM_OF_BASE = 4;
 	static Integer MAX_ITERATION = 1000; 
 	
-	public static double[][] EM(Integer width, char[][] dataSeqs){
-		
-		
-		int numOfSeq = dataSeqs.length;
-		int[] seqLength = new int[numOfSeq];
-		int maxLengthOfSeq = 0;
-		for(int i = 0; i< numOfSeq ; i++){
-			seqLength[i] = dataSeqs[i].length;
-			if(maxLengthOfSeq<seqLength[i])maxLengthOfSeq=seqLength[i];		
-		}
-		Res.PutBasesVal();
-		double[][] profile = new double[NUM_OF_BASE][width+1]; 
-		double[][] hiddenZ = getRndHiddenZ(numOfSeq, width, seqLength, maxLengthOfSeq);
-				
-		int iteration = 0;
+	char[][]dataSeqs;
+	
+	int iteration;
+	int numOfSeq;
+	int[] seqLength;
+	int maxLengthOfSeq;
+	int numOfSubSeq;
+	int width;
+	
+	double [][] profile;
+	double [][] posZ;
+	double [][] negZ;
+	double posLambda;
+	double[][] posP;
+	double[][] negP;
+	
+	public void Run(){
 		do{
 			iteration++;
-			//M-step : estimate profile from hiddenZ
-			profile = M_Step(profile, hiddenZ, numOfSeq, width, seqLength, dataSeqs);
-			//E-step : estimate hiddenZ from profile
-			hiddenZ = E_Step(profile, hiddenZ, numOfSeq, width, seqLength, dataSeqs);			
+			M_Step();
+			E_Step();			
 		}while(iteration < MAX_ITERATION); // terminal condition ( delta-profile < epsilon) || (1000-times)
-		return profile;
 	}
-	//E-step : estimate hiddenZ from profile
-	private static double [][] E_Step( double[][] profile, double[][] hiddenZ, int numOfSeq, int width, int[] seqLength, char[][] dataSeq){
-		for(int i = 0; i< numOfSeq; i++){
-			double backgroundZ = 1.0;
-			for(int j = 0; j<seqLength[i]; j++)backgroundZ *= profile[Res.basesMap.get(dataSeq[i][j])][0]*(double)NUM_OF_BASE;
-			double sum = 0.0;
-			for(int j = 0; j<seqLength[i]-width; j++){
-				hiddenZ[i][j] = backgroundZ;
-				for(int k = 0; k < width; k++){
-					hiddenZ[i][j] /= profile[Res.basesMap.get(dataSeq[i][j+k])][0];
-					hiddenZ[i][j] *= profile[Res.basesMap.get(dataSeq[i][j+k])][k+1];
-				}
-				sum += hiddenZ[i][j];
-			}
-			for(int j = 0; j<seqLength[i]-width; j++)hiddenZ[i][j] /= sum;
+	
+	public Meme(Integer _width, char[][] _dataSeqs){
+		this.width = _width;
+		this.dataSeqs = _dataSeqs;
+		
+		numOfSeq = dataSeqs.length;
+		seqLength = new int[numOfSeq];
+		maxLengthOfSeq = 0;
+		numOfSubSeq = 0;
+		for(int i = 0; i< numOfSeq ; i++){
+			seqLength[i] = dataSeqs[i].length;
+			numOfSubSeq += seqLength[i]-width+1;
+			if(maxLengthOfSeq<seqLength[i])maxLengthOfSeq=seqLength[i];		
 		}
-		return hiddenZ;
+		Res.Init();
+		iteration = 0;
+		
+		profile = new double[NUM_OF_BASE][width+1]; 
+		posZ = getRndHiddenZ();
+		negZ = getRndHiddenZ();
+		posP = new double[numOfSeq][maxLengthOfSeq-width+1]; //pOfObservedDataGivenProfile
+		negP = new double[numOfSeq][maxLengthOfSeq-width+1]; //pOfObservedDataGivenProfile
 	}
-	//M-step : estimate profile from hiddenZ
-	private static double [][] M_Step(double[][] profile, double[][] hiddenZ, int numOfSeq, int width, int[] seqLength, char[][] dataSeq){
-		for(double[] profileLine : profile)for(double profileEle : profileLine)profileEle = 0.0;		
+	
+	//E-step : estimate Z from profile, lambda
+	private void E_Step(){
+		for(int i = 0; i< numOfSeq; i++){
+			for(int j = 0; j<seqLength[i]-width+1; j++){
+				posP[i][j] = negP[i][j] = 1.0;
+				for(int k = 0; k < width; k++){
+					posP[i][j] *= profile[Res.basesMap.get(dataSeqs[i][j+k])][k+1];
+					negP[i][j] *= profile[Res.basesMap.get(dataSeqs[i][j+k])][0];
+				}
+				double temp1, temp2, temp3;
+				temp1 = posP[i][j] * posLambda;
+				temp2 = negP[i][j] * (1.0 - posLambda);
+				temp3 = temp1 + temp2;
+				posZ[i][j] = temp1/temp3;
+				negZ[i][j] = temp2/temp3;
+	}	}	}
+	
+	//M-step : estimate profile, lambda from Z
+	private void M_Step(){
+		GetLambda();
+		GetProfile();	
+	}
+	
+	private void GetLambda(){
+		for(int i = 0; i< numOfSeq; i++){
+			for(int j = 0; j<seqLength[i]-width+1; j++) posLambda += posZ[i][j];
+			posLambda /= (double)numOfSubSeq;
+	}	}
+	
+	private void GetProfile(){
+		for(double[] profileLine : profile)for(double profileEle : profileLine)profileEle = 0.0;	
 		for(int i = 0; i <numOfSeq; i++){
-			for(int j = 0; j < seqLength[i]; j++){				 
-				for(int k = 1; k <= width; k++){
-					if(j-k+1 >= 0 && j-k+1 <= seqLength[i] - width ) {
-						profile[Res.basesMap.get(dataSeq[i][j])][0] += (1.0-hiddenZ[i][j-k+1]);
-						profile[Res.basesMap.get(dataSeq[i][j])][k] += hiddenZ[i][j-k+1];	
-					}
+			for(int j=0; j<seqLength[i]-width+1; j++){
+				for(int k = 1; k <= width; k++)if(j-k+1 >= 0 && j-k+1 <= seqLength[i] - width ) {						
+					profile[Res.basesMap.get(dataSeqs[i][j])][0] += negZ[i][j-k+1];
+					profile[Res.basesMap.get(dataSeqs[i][j])][k] += posZ[i][j-k+1];	
 		}	}	}
 		for(int j = 0; j < width+1; j++) {
 			double sum = 0.0;
 			for(int i = 0; i < NUM_OF_BASE; i++)sum += profile[i][j];
 			for(int i = 0; i < NUM_OF_BASE; i++)profile[i][j] /=sum;
-		}
-		return profile;
-	}
+	}	}
 	
-	private static double[][] getRndHiddenZ(int numOfSeq, int width, int[] seqLength, int maxLengthOfSeq){
-		
+	private double[][] getRndHiddenZ(){
 		double[][] hiddenZ = new double[numOfSeq][maxLengthOfSeq-width+1];
 		Random randomGenerator = new Random();
 		for(int i = 0; i< numOfSeq; i++){
@@ -77,6 +104,14 @@ public class Meme {
 			for(int j = 0; j < seqLength[i]-width+1; j++)hiddenZ[i][j] /= total; //normalization
 		}
 		return hiddenZ;
+	}
+	
+	public void PrintProfile(){
+		for(double[] profileLine: profile){
+			String result = "";
+			for(double profileEle : profileLine) result += profileEle + ", ";
+			System.out.println(result);
+		}
 	}
 	
 	/*

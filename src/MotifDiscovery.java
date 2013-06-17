@@ -8,15 +8,9 @@ public class MotifDiscovery {
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
 		char[][] dataSeqs = DataIO.ReadDataSp(Res.drFiles);
-		double localOptProfile[][] = Meme.EM(5, dataSeqs);
-		PrintResult(localOptProfile);
+		Meme meme = new Meme(5, dataSeqs);
+		meme.Run();
+		meme.PrintProfile();
 	}
 	
-	public static void PrintResult(double[][] profile){
-		for(double[] profileLine: profile){
-			String result = "";
-			for(double profileEle : profileLine) result += profileEle + ", ";
-			System.out.println(result);
-		}
-	}
  }
